@@ -133,33 +133,42 @@ class MineRLTreechop(BaseDatasetBuilder):
         trajectory_names: list[str],
     ):
         action_dim: int | None = None
-        for episode_id, trajectory_name in enumerate(trajectory_names):
-            for timestep, transition in enumerate(pipeline.load_data(trajectory_name)):
-                if len(transition) < 5:
-                    raise ValueError(
-                        "MineRL transitions must be (state, action, reward, next_state, done)."
-                    )
-                state, action, reward, _next_state, done = transition[:5]
-                if not isinstance(state, Mapping):
-                    raise TypeError("MineRL state must be a mapping containing 'pov'.")
-                action_vector = _flatten_numeric(action)
-                if action_dim is None:
-                    action_dim = int(action_vector.size)
-                elif action_vector.size != action_dim:
-                    raise ValueError(
-                        "MineRL action schema changed within the dataset: "
-                        f"expected {action_dim} values, got {action_vector.size}."
-                    )
-                key = f"{episode_id}:{timestep}"
-                yield key, {
-                    "image": _rgb_pov(state),
-                    "action": action_vector,
-                    "reward": np.float32(reward),
-                    "done": bool(done),
-                    "episode_id": np.int32(episode_id),
-                    "trajectory_name": trajectory_name,
-                    "timestep": np.int32(timestep),
-                }
+        try:
+            for episode_id, trajectory_name in enumerate(trajectory_names):
+                for timestep, transition in enumerate(pipeline.load_data(trajectory_name)):
+                    if len(transition) < 5:
+                        raise ValueError(
+                            "MineRL transitions must be (state, action, reward, next_state, done)."
+                        )
+                    state, action, reward, _next_state, done = transition[:5]
+                    if not isinstance(state, Mapping):
+                        raise TypeError("MineRL state must be a mapping containing 'pov'.")
+                    action_vector = _flatten_numeric(action)
+                    if action_dim is None:
+                        action_dim = int(action_vector.size)
+                    elif action_vector.size != action_dim:
+                        raise ValueError(
+                            "MineRL action schema changed within the dataset: "
+                            f"expected {action_dim} values, got {action_vector.size}."
+                        )
+                    key = f"{episode_id}:{timestep}"
+                    yield key, {
+                        "image": _rgb_pov(state),
+                        "action": action_vector,
+                        "reward": np.float32(reward),
+                        "done": bool(done),
+                        "episode_id": np.int32(episode_id),
+                        "trajectory_name": trajectory_name,
+                        "timestep": np.int32(timestep),
+                    }
+        finally:
+            # MineRL's legacy DataPipeline owns a multiprocessing Pool but has
+            # no public close method. Clean it up after cache construction so
+            # consumers do not see an interpreter-shutdown warning.
+            pool = getattr(pipeline, "processing_pool", None)
+            if pool is not None:
+                pool.close()
+                pool.join()
 
 
 __all__ = ["MineRLTreechop"]
