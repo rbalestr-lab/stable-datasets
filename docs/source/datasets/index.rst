@@ -77,6 +77,7 @@ Available Datasets
    :caption: Video Datasets
 
    something_something_v2
+   minerl_treechop
 
 .. note::
    Documentation is being added progressively, as datasets are ready for usage. Please only use datasets found in the documentation.
